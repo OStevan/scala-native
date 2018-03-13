@@ -8,10 +8,10 @@
 #define MAP_ANONYMOUS MAP_ANON
 #endif
 
-// Dummy GC that maps chunks of 4GB and allocates but never frees.
+// Dummy GC that maps chunks of 512MB per thread and allocates but never frees.
 
-// Map 4GB
-#define CHUNK (4 * 1024 * 1024 * 1024L)
+// Chunk size of 512MB
+#define CHUNK (512 * 1024 * 1024L)
 // Allow read and write
 #define DUMMY_GC_PROT (PROT_READ | PROT_WRITE)
 // Map private anonymous memory, and prevent from reserving swap
@@ -20,40 +20,46 @@
 #define DUMMY_GC_FD -1
 #define DUMMY_GC_FD_OFFSET 0
 
-atomic_long current_atomic = 0;
-void *end = 0;
+// use char pointers to allow easier pointer arithmetic
+typedef struct {
+    char* current;
+    char* end;
+} thread_heap;
 
-pthread_mutex_t chunk_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void allocateChunksUpTo(void *target) {
-    pthread_mutex_lock(&chunk_alloc_mutex);
-    // do not allocate multiple chunks at once
-    if (target >= end) {
-        void *current = (void *)current_atomic;
-        current = mmap(NULL, CHUNK, DUMMY_GC_PROT, DUMMY_GC_FLAGS, DUMMY_GC_FD,
-                       DUMMY_GC_FD_OFFSET);
-        current_atomic = (long)current;
-        end = current + CHUNK;
-    }
-    pthread_mutex_unlock(&chunk_alloc_mutex);
+// thread local variable(see the C11 specs)
+_Thread_local thread_heap heap = {.current = NULL, .end = NULL};
+
+
+// allocates the thread heap
+static void initialize_memory() {
+    heap.current = mmap(NULL, CHUNK, DUMMY_GC_PROT, DUMMY_GC_FLAGS, DUMMY_GC_FD,
+                   DUMMY_GC_FD_OFFSET);
+    heap.end = heap.current + CHUNK;
 }
 
+
+// called by main thread
 void scalanative_init() {
-    // get some space initially
-    allocateChunksUpTo((void *)1);
+    initialize_memory();
 }
 
 void *scalanative_alloc(void *info, size_t size) {
     size = size + (8 - size % 8);
-    void *new_current;
-    new_current = (void *)atomic_fetch_add(&current_atomic, size);
-    if (new_current >= end) {
-        allocateChunksUpTo(new_current);
+
+    // check if the thread has enough space
+    if (heap.current + size < heap.end) {
+        void **alloc = (void*)heap.current;
+        *alloc = info;
+        heap.current += size;
+        return alloc;
+    } else {
+        // allocate new space
+        initialize_memory();
+        // call again alloc, this time it surely suceedes
+        return scalanative_alloc(info, size);
     }
 
-    void **alloc = new_current;
-    *alloc = info;
-    return alloc;
 }
 
 void *scalanative_alloc_small(void *info, size_t size) {

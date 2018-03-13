@@ -73,7 +73,20 @@ package object runtime {
   def getType(obj: Object): Ptr[ClassType] = !obj.cast[Ptr[Ptr[ClassType]]]
 
   /** Get monitor for given object. */
+  // TODO check if it is possible to remove this
   def getMonitor(obj: Object): Monitor = Monitor(obj)
+
+
+  /** Monitor enter method */
+  def monitorEnter(obj: Object): Unit = {
+    Monitor.enter(obj)
+  }
+
+  /** Monitor exit method */
+  def monitorExit(obj: Object): Unit = {
+    Monitor.exit(obj)
+  }
+
 
   /** Initialize runtime with given arguments and return the
    *  rest as Java-style array.
