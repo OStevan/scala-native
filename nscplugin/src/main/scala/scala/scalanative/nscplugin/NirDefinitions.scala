@@ -130,6 +130,15 @@ trait NirDefinitions { self: NirGlobalAddons =>
     lazy val RuntimeModule = getRequiredModule(
       "scala.scalanative.runtime.package")
     lazy val TypeofMethod = getMember(RuntimeModule, TermName("typeof"))
+
+    // my idea for monitor
+    lazy val MonitorEnterMethod =
+      getMember(RuntimeModule, TermName("monitorEnter"))
+    lazy val MonitorExitMethod =
+      getMember(RuntimeModule, TermName("monitorExit"))
+    // end of my idea
+
+
     lazy val GetMonitorMethod =
       getMember(RuntimeModule, TermName("getMonitor"))
     lazy val DivUIntMethod  = getMember(RuntimeModule, TermName("divUInt"))

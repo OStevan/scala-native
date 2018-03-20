@@ -18,19 +18,26 @@ import scala.scalanative.posix.sys.types.{
 import scala.scalanative.runtime.ThreadBase._
 
 final class Monitor private[runtime] (shadow: Boolean) {
+
   // memory leak
+  // TODO change this to thin lock
   // TODO destroy the mutex and release the memory
   private val mutexPtr: Ptr[pthread_mutex_t] = malloc(pthread_mutex_t_size)
     .asInstanceOf[Ptr[pthread_mutex_t]]
   pthread_mutex_init(mutexPtr, Monitor.mutexAttrPtr)
+
   // memory leak
   // TODO destroy the condition and release the memory
   private val condPtr: Ptr[pthread_cond_t] = malloc(pthread_cond_t_size)
     .asInstanceOf[Ptr[pthread_cond_t]]
   pthread_cond_init(condPtr, Monitor.condAttrPtr)
 
+  // TODO see what happens when a lock is thin
   def _notify(): Unit    = pthread_cond_signal(condPtr)
   def _notifyAll(): Unit = pthread_cond_broadcast(condPtr)
+
+  // TODO change this so that it check which type of lock is now force the change to fat lock
+  // TODO try to siplify these ifs
   def _wait(): Unit = {
     val thread = ThreadBase.currentThreadInternal
     if (thread != null) {
@@ -45,6 +52,8 @@ final class Monitor private[runtime] (shadow: Boolean) {
     }
   }
   def _wait(millis: scala.Long): Unit = _wait(millis, 0)
+
+  // TODO same as the condition with wait
   def _wait(millis: scala.Long, nanos: Int): Unit = {
     val thread = ThreadBase.currentThreadInternal
     if (thread != null) {
@@ -70,6 +79,8 @@ final class Monitor private[runtime] (shadow: Boolean) {
       throw new IllegalMonitorStateException()
     }
   }
+
+  // TODO change entering to accommodate fat locks
   def enter(): Unit = {
     if (pthread_mutex_trylock(mutexPtr) == EBUSY) {
       val thread = ThreadBase.currentThreadInternal()
@@ -89,6 +100,7 @@ final class Monitor private[runtime] (shadow: Boolean) {
     }
   }
 
+  // TODO change exiting to accommodate fat lock
   def exit(): Unit = {
     if (!shadow) {
       popLock()
@@ -123,21 +135,33 @@ final class Monitor private[runtime] (shadow: Boolean) {
 }
 
 object Monitor {
+  /**
+    * Attributes of a standard mutex*/
   private val mutexAttrPtr: Ptr[pthread_mutexattr_t] = malloc(
     pthread_mutexattr_t_size).asInstanceOf[Ptr[pthread_mutexattr_t]]
   pthread_mutexattr_init(mutexAttrPtr)
   pthread_mutexattr_settype(mutexAttrPtr, PTHREAD_MUTEX_RECURSIVE)
 
+  /**
+    * Attributes of a standard condition variable.
+    */
   private val condAttrPtr: Ptr[pthread_condattr_t] = malloc(
     pthread_condattr_t_size).asInstanceOf[Ptr[pthread_cond_t]]
   pthread_condattr_init(condAttrPtr)
   pthread_condattr_setpshared(condAttrPtr, PTHREAD_PROCESS_SHARED)
 
+  /**
+    * Mutex to prevent race condition on Monitor object creation when first calling
+    * synchronize on an Object
+    */
   private[runtime] val monitorCreationMutexPtr: Ptr[pthread_mutex_t] = malloc(
     pthread_mutex_t_size)
     .asInstanceOf[Ptr[pthread_mutex_t]]
   pthread_mutex_init(monitorCreationMutexPtr, Monitor.mutexAttrPtr)
 
+  /**
+    * Used to return the monitor instance associated with an java.lang.Object
+    */
   def apply(x: java.lang.Object): Monitor = {
     val o = x.asInstanceOf[_Object]
     if (o.__monitor != null) {
