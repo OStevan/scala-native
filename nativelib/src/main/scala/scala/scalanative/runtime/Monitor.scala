@@ -19,25 +19,21 @@ import scala.scalanative.runtime.ThreadBase._
 
 final class Monitor private[runtime] (shadow: Boolean) {
 
-  // memory leak
-  // TODO change this to thin lock
-  // TODO destroy the mutex and release the memory
+  // memory leak possible solution is to call free in finalize
   private val mutexPtr: Ptr[pthread_mutex_t] = malloc(pthread_mutex_t_size)
     .asInstanceOf[Ptr[pthread_mutex_t]]
   pthread_mutex_init(mutexPtr, Monitor.mutexAttrPtr)
 
-  // memory leak
-  // TODO destroy the condition and release the memory
+  // memory leak possible solution is to call free in finalize
   private val condPtr: Ptr[pthread_cond_t] = malloc(pthread_cond_t_size)
     .asInstanceOf[Ptr[pthread_cond_t]]
   pthread_cond_init(condPtr, Monitor.condAttrPtr)
 
-  // TODO see what happens when a lock is thin
+
   def _notify(): Unit    = pthread_cond_signal(condPtr)
   def _notifyAll(): Unit = pthread_cond_broadcast(condPtr)
 
-  // TODO change this so that it check which type of lock is now force the change to fat lock
-  // TODO try to siplify these ifs
+
   def _wait(): Unit = {
     val thread = ThreadBase.currentThreadInternal
     if (thread != null) {
@@ -53,7 +49,7 @@ final class Monitor private[runtime] (shadow: Boolean) {
   }
   def _wait(millis: scala.Long): Unit = _wait(millis, 0)
 
-  // TODO same as the condition with wait
+
   def _wait(millis: scala.Long, nanos: Int): Unit = {
     val thread = ThreadBase.currentThreadInternal
     if (thread != null) {
@@ -108,6 +104,7 @@ final class Monitor private[runtime] (shadow: Boolean) {
     pthread_mutex_unlock(mutexPtr)
   }
 
+  // TODO remove this from monitor and put in monitor ops
   @inline
   private def pushLock(): Unit = {
     val thread = ThreadBase.currentThreadInternal()
@@ -123,6 +120,7 @@ final class Monitor private[runtime] (shadow: Boolean) {
     }
   }
 
+  // TODO remove this from monitor and put in monitor ops
   @inline
   private def popLock(): Unit = {
     val thread = ThreadBase.currentThreadInternal()
@@ -154,6 +152,7 @@ object Monitor {
     * Mutex to prevent race condition on Monitor object creation when first calling
     * synchronize on an Object
     */
+  // TODO do not use this any more
   private[runtime] val monitorCreationMutexPtr: Ptr[pthread_mutex_t] = malloc(
     pthread_mutex_t_size)
     .asInstanceOf[Ptr[pthread_mutex_t]]
@@ -162,6 +161,7 @@ object Monitor {
   /**
     * Used to return the monitor instance associated with an java.lang.Object
     */
+  // TODO this can now just create a single monitor instance
   def apply(x: java.lang.Object): Monitor = {
     val o = x.asInstanceOf[_Object]
     if (o.__monitor != null) {

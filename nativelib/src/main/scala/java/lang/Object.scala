@@ -5,6 +5,8 @@ import scala.scalanative.runtime, runtime.ClassTypeOps
 import scala.scalanative.runtime.Intrinsics._
 
 class _Object {
+
+  // TODO change this to a CLong and use it as thin lock
   var __monitor: scala.scalanative.runtime.Monitor = _
   @inline def __equals(that: _Object): scala.Boolean =
     this eq that
@@ -20,18 +22,24 @@ class _Object {
   @inline def __getClass(): _Class[_] =
     new _Class(runtime.getType(this).cast[Ptr[runtime.Type]])
 
+  // TODO inflate a lock if it is thin
   @inline def __notify(): Unit =
     runtime.getMonitor(this)._notify
 
+  // TODO inflate a lock if it is thin
   @inline def __notifyAll(): Unit =
     runtime.getMonitor(this)._notifyAll
 
+
+  // TODO inflate a lock if it is thin
   @inline def __wait(): Unit =
     runtime.getMonitor(this)._wait
 
+  // TODO inflate a lock if it is thin
   @inline def __wait(timeout: scala.Long): Unit =
     runtime.getMonitor(this)._wait(timeout)
 
+  // TODO inflate a lock if it is thin
   @inline def __wait(timeout: scala.Long, nanos: Int): Unit =
     runtime.getMonitor(this)._wait(timeout, nanos)
 
