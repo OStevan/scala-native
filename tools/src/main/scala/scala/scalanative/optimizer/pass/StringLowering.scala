@@ -18,7 +18,7 @@ class StringLowering(implicit top: Top) extends Pass {
   private val stringFieldNames = {
     val node  = ClassRef.unapply(StringName).get
     val names = node.layout.entries.map(_.name)
-    assert(names.length == 5, s"java.lang.String is expected to have 5 fields")
+    assert(names.length == 5, "java.lang.String is expected to have 5 fields")
     names
   }
 
@@ -75,7 +75,7 @@ object StringLowering extends PassCompanion {
   val StringOffsetName         = StringName member "offset" tag "field"
   val StringCountName          = StringName member "count" tag "field"
   val StringCachedHashCodeName = StringName member "cachedHashCode" tag "field"
-  val StringMonitorName        = Rt.Object.name member "__atomic" tag "field"
+  val StringMonitorName        = Rt.Object.name member "__monitor" tag "field"
 
   val CharArrayName = Global.Top("scala.scalanative.runtime.CharArray")
 

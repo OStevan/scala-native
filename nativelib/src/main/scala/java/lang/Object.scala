@@ -8,7 +8,7 @@ import scala.scalanative.runtime.Intrinsics._
 class _Object {
 
   // thin lock, starts as 0
-  var __atomic: CLong = 0L
+  var __monitor: CLong = 0L
 
   @inline def __equals(that: _Object): scala.Boolean =
     this eq that

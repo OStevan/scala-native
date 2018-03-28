@@ -120,10 +120,10 @@ object Monitor {
     * synchronize on an Object
     */
   // TODO do not use this any more
-//  private[runtime] val monitorCreationMutexPtr: Ptr[pthread_mutex_t] = malloc(
-//    pthread_mutex_t_size)
-//    .asInstanceOf[Ptr[pthread_mutex_t]]
-//  pthread_mutex_init(monitorCreationMutexPtr, Monitor.mutexAttrPtr)
+  //  private[runtime] val monitorCreationMutexPtr: Ptr[pthread_mutex_t] = malloc(
+  //    pthread_mutex_t_size)
+  //    .asInstanceOf[Ptr[pthread_mutex_t]]
+  //  pthread_mutex_init(monitorCreationMutexPtr, Monitor.mutexAttrPtr)
 
   /**
     * Thin lock implementation specific mask;
@@ -158,10 +158,10 @@ object Monitor {
     // thin lock try enter no contention
 
     if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, threadID))
-      // thin lock and you are taking it
+    // thin lock and you are taking it
       return
 
-    val lockValue =  Atomic.load_long(pointerToAtomic)
+    val lockValue = Atomic.load_long(pointerToAtomic)
     // check if you are the owner of thin lock and return
     if (((lockValue & LOCK_TYPE_MASK) == 0) &&
       // current thread is the owner increment pin count
@@ -200,45 +200,45 @@ object Monitor {
 
   def exit(obj: java.lang.Object): Unit = {
 
-    if (!obj.isInstanceOf[ShadowLock]) {
-      popLock()
+      if (!obj.isInstanceOf[ShadowLock]) {
+        popLock(obj)
+      }
+
+      val o = obj.asInstanceOf[_Object]
+      // cast to pointer and move to the address locking part of the header
+      val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1
+
+      val threadID: CLong = ThreadBase.currentThreadInternal().getId
+
+      val lockValue = Atomic.load_long(pointerToAtomic)
+      // thin lock top most unlock
+      if (lockValue == threadID) {
+        Atomic.store_long(pointerToAtomic, 0L)
+        return
+      }
+
+      // thin lock recursive unlock
+      if ((lockValue & LOCK_TYPE_MASK) == 0) {
+        Atomic.store_long(pointerToAtomic, lockValue - RECURSION_INCREMENT)
+        return
+      }
+
+      // fat lock unlock
+      val monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
+      monitor.exit()
     }
-
-    val o = obj.asInstanceOf[_Object]
-    // cast to pointer and move to the address locking part of the header
-    val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1
-
-    val threadID: CLong = ThreadBase.currentThreadInternal().getId
-
-    val lockValue = Atomic.load_long(pointerToAtomic)
-    // thin lock top most unlock
-    if (lockValue == threadID) {
-      Atomic.store_long(pointerToAtomic, 0L)
-      return
-    }
-
-    // thin lock recursive unlock
-    if ((lockValue & LOCK_TYPE_MASK) == 0) {
-      Atomic.store_long(pointerToAtomic, lockValue - RECURSION_INCREMENT)
-      return
-    }
-
-    // fat lock unlock
-    val monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
-    monitor.exit()
-  }
-
 
 
   @inline
   private def pushLock(obj: java.lang.Object): Unit = {
     val thread = ThreadBase.currentThreadInternal()
+    val x = obj.asInstanceOf[java.lang._Object]
     if (thread != null) {
-      thread.locks(thread.size) = obj
+      thread.locks(thread.size) = x
       thread.size += 1
       if (thread.size >= thread.locks.length) {
         val oldArray = thread.locks
-        val newArray = new scala.Array[java.lang.Object](oldArray.length * 2)
+        val newArray = new scala.Array[java.lang._Object](oldArray.length * 2)
         System.arraycopy(oldArray, 0, newArray, 0, oldArray.length)
         thread.locks = newArray
       }
@@ -246,10 +246,10 @@ object Monitor {
   }
 
   @inline
-  private def popLock(): Unit = {
+  private def popLock(obj: java.lang.Object): Unit = {
     val thread = ThreadBase.currentThreadInternal()
     if (thread != null) {
-      if (thread.locks(thread.size - 1) == this) {
+      if (thread.locks(thread.size - 1) == obj) {
         thread.size -= 1
       }
     }
