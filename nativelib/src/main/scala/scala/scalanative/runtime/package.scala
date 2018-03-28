@@ -79,12 +79,12 @@ package object runtime {
 
   /** Monitor enter method */
   def monitorEnter(obj: Object): Unit = {
-    Monitor(obj).enter()
+    Monitor.enter(obj)
   }
 
   /** Monitor exit method */
   def monitorExit(obj: Object): Unit = {
-    Monitor(obj).exit()
+    Monitor.exit(obj)
   }
 
 
