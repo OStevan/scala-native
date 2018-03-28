@@ -67,7 +67,9 @@ object UnitLowering extends PassCompanion {
   val unit      = Val.Global(unitName, Type.Ptr)
   val unitTy    = Type.Struct(unitName member "layout", Seq(Type.Ptr))
   val unitConst = Val.Global(unitName member "type", Type.Ptr)
-  val unitValue = Val.Struct(unitTy.name, Seq(Val.Null, unitConst))
+
+  // TODO check if this is ok
+  val unitValue = Val.Struct(unitTy.name, Seq(unitConst, Val.Long(0)))
   val unitDefn  = Defn.Const(Attrs.None, unitName, unitTy, unitValue)
 
   override val depends =
