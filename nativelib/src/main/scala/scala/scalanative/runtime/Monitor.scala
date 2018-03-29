@@ -1,6 +1,6 @@
 package scala.scalanative.runtime
 
-import scala.scalanative.native._
+import scala.scalanative.native.{CCast, Ptr, CLong, stackalloc}
 import scala.scalanative.native.stdlib.malloc
 import scala.scalanative.posix.errno.{EBUSY, EPERM}
 import scala.scalanative.posix.pthread._
@@ -72,7 +72,7 @@ final class Monitor private[runtime] {
       thread.setLockState(Normal)
     }
     if (returnVal == EPERM) {
-      throw new IllegalMonitorStateException()
+      // throw new IllegalMonitorStateException()
     }
   }
 
@@ -135,12 +135,51 @@ object Monitor {
   final val RECURSION_MASK: CLong = 0x0FF0000L
   final val THREAD_ID_MASK: CLong = 0x0FFFFL | LOCK_TYPE_MASK
 
+
+  private def inflateLock(expectedPtr: Ptr[CLong], threadID: CLong, pointerToAtomic: Ptr[CLong], flag: Boolean): Monitor = {
+    var monitor: Monitor = new Monitor
+    var obtainedMonitor = false
+
+    var lockValue = Atomic.load_long(pointerToAtomic)
+
+    while (!obtainedMonitor) {
+      if ((lockValue & LOCK_TYPE_MASK) != 0) {
+        // fat lock enter
+        monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
+        obtainedMonitor = true
+      } else {
+        // obtain the thin lock and inflate it
+        if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, threadID)) {
+          val monitorCasted = monitor.cast[Ptr[Byte]].cast[CLong]
+          Atomic.store_long(pointerToAtomic, monitorCasted | LOCK_TYPE_MASK)
+          obtainedMonitor = true
+        }
+      }
+      lockValue = Atomic.load_long(pointerToAtomic)
+    }
+
+    monitor.enter()
+
+    monitor
+  }
+
+  def apply(x: java.lang.Object): Monitor = {
+    val expectedPtr = stackalloc[CLong]
+    !expectedPtr = 0L
+//    val thread: Thread with ThreadBase = ThreadBase.currentThreadInternal()
+    val pointerToAtomic = x.cast[Ptr[CLong]] + 1L
+//    if (thread != null) {
+//      inflateLock(expectedPtr, thread.getId, pointerToAtomic, x.isInstanceOf[ShadowLock])
+//    }
+//    else {
+      inflateLock(expectedPtr, 1L, pointerToAtomic, x.isInstanceOf[ShadowLock])
+//    }
+  }
+
+
   /**
     * Used to return the monitor instance associated with an java.lang.Object
     */
-  def apply(x: java.lang.Object): Monitor = {
-    new Monitor()
-  }
 
   // TODO refactor, maybe some casts are not necessary, possibly put backoff
   def enter(obj: java.lang.Object): Unit = {
@@ -152,16 +191,17 @@ object Monitor {
 
     val o = obj.asInstanceOf[_Object]
     // cast to pointer and move to the address locking part of the header
-    val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1
+    val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1L
 
-    val threadID: CLong = ThreadBase.currentThreadInternal().getId
+    //val threadID: CLong = ThreadBase.currentThreadInternal().getId
+    val threadID = 1L
     // thin lock try enter no contention
 
     if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, threadID))
     // thin lock and you are taking it
       return
 
-    val lockValue = Atomic.load_long(pointerToAtomic)
+    var lockValue = Atomic.load_long(pointerToAtomic)
     // check if you are the owner of thin lock and return
     if (((lockValue & LOCK_TYPE_MASK) == 0) &&
       // current thread is the owner increment pin count
@@ -191,6 +231,7 @@ object Monitor {
           monitor.enter()
         }
       }
+      lockValue = Atomic.load_long(pointerToAtomic)
     }
 
     if (!obj.isInstanceOf[ShadowLock])
@@ -200,33 +241,34 @@ object Monitor {
 
   def exit(obj: java.lang.Object): Unit = {
 
-      if (!obj.isInstanceOf[ShadowLock]) {
-        popLock(obj)
-      }
-
-      val o = obj.asInstanceOf[_Object]
-      // cast to pointer and move to the address locking part of the header
-      val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1
-
-      val threadID: CLong = ThreadBase.currentThreadInternal().getId
-
-      val lockValue = Atomic.load_long(pointerToAtomic)
-      // thin lock top most unlock
-      if (lockValue == threadID) {
-        Atomic.store_long(pointerToAtomic, 0L)
-        return
-      }
-
-      // thin lock recursive unlock
-      if ((lockValue & LOCK_TYPE_MASK) == 0) {
-        Atomic.store_long(pointerToAtomic, lockValue - RECURSION_INCREMENT)
-        return
-      }
-
-      // fat lock unlock
-      val monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
-      monitor.exit()
+    if (!obj.isInstanceOf[ShadowLock]) {
+      popLock(obj)
     }
+
+    val o = obj.asInstanceOf[_Object]
+    // cast to pointer and move to the address locking part of the header
+    val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1L
+
+    //val threadID: CLong = ThreadBase.currentThreadInternal().getId
+    val threadID = 1L
+
+    val lockValue = Atomic.load_long(pointerToAtomic)
+    // thin lock top most unlock
+    if (lockValue == threadID) {
+      Atomic.store_long(pointerToAtomic, 0L)
+      return
+    }
+
+    // thin lock recursive unlock
+    if ((lockValue & LOCK_TYPE_MASK) == 0) {
+      Atomic.store_long(pointerToAtomic, lockValue - RECURSION_INCREMENT)
+      return
+    }
+
+    // fat lock unlock
+    val monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
+    monitor.exit()
+  }
 
 
   @inline

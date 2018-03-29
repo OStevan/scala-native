@@ -84,6 +84,7 @@ object StringLowering extends PassCompanion {
                              StringOffsetName,
                              StringCountName,
                              StringCachedHashCodeName,
+                             StringMonitorName,
                              CharArrayName)
 
   override def apply(config: tools.Config, top: Top) =
