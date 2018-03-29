@@ -43,7 +43,7 @@ class StringLowering(implicit top: Top) extends Pass {
         case StringOffsetName         => Val.Int(0)
         case StringCountName          => charsLength
         case StringCachedHashCodeName => Val.Int(stringHashCode(v))
-        case StringMonitorName        => Val.Long(0)
+        case StringMonitorName        => Val.Null
         case x                        => util.unreachable
       }
 

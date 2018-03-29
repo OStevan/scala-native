@@ -323,6 +323,8 @@ class CAtomicLong(default: CLong = 0.asInstanceOf[CLong]) extends CAtomic {
     }
   }
 
+  // (Denys check this out just in case) not sure if this the goal but this is not atomic
+  // especially because it is used to get thread IDs
   def addFetch(value: CLong): CLong = {
     fetchAdd(value)
     load()
