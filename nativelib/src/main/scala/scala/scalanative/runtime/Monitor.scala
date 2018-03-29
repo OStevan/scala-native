@@ -72,7 +72,7 @@ final class Monitor private[runtime] {
       thread.setLockState(Normal)
     }
     if (returnVal == EPERM) {
-      // throw new IllegalMonitorStateException()
+      throw new IllegalMonitorStateException()
     }
   }
 
