@@ -18,7 +18,7 @@ import scala.scalanative.posix.sys.types.{
 }
 import scala.scalanative.runtime.ThreadBase._
 
-final class Monitor private[runtime] (shadow: Boolean) {
+final class Monitor private[runtime] (val shadow: Boolean) {
   // memory leak
   // TODO destroy the mutex and release the memory
   private val mutexPtr: Ptr[pthread_mutex_t] = malloc(pthread_mutex_t_size)
@@ -85,41 +85,10 @@ final class Monitor private[runtime] (shadow: Boolean) {
         pthread_mutex_lock(mutexPtr)
       }
     }
-    if (!shadow) {
-      pushLock()
-    }
   }
 
   def exit(): Unit = {
-    if (!shadow) {
-      popLock()
-    }
     pthread_mutex_unlock(mutexPtr)
-  }
-
-  @inline
-  private def pushLock(): Unit = {
-    val thread = ThreadBase.currentThreadInternal()
-    if (thread != null) {
-      thread.locks(thread.size) = this
-      thread.size += 1
-      if (thread.size >= thread.locks.length) {
-        val oldArray = thread.locks
-        val newArray = new scala.Array[Monitor](oldArray.length * 2)
-        System.arraycopy(oldArray, 0, newArray, 0, oldArray.length)
-        thread.locks = newArray
-      }
-    }
-  }
-
-  @inline
-  private def popLock(): Unit = {
-    val thread = ThreadBase.currentThreadInternal()
-    if (thread != null) {
-      if (thread.locks(thread.size - 1) == this) {
-        thread.size -= 1
-      }
-    }
   }
 }
 
@@ -160,11 +129,43 @@ object Monitor {
   def enter(obj: Object): Unit = {
     val monitor = Monitor(obj)
     monitor.enter()
+    if (!monitor.shadow) {
+      pushLock(monitor)
+    }
   }
 
   def exit(obj: Object): Unit ={
     val monitor = Monitor(obj)
+    if (!monitor.shadow)
+      popLock(monitor)
     monitor.exit()
+  }
+
+
+  // helpers
+  @inline
+  private def pushLock(monitor: Monitor): Unit = {
+    val thread = ThreadBase.currentThreadInternal()
+    if (thread != null) {
+      thread.locks(thread.size) = monitor
+      thread.size += 1
+      if (thread.size >= thread.locks.length) {
+        val oldArray = thread.locks
+        val newArray = new scala.Array[Monitor](oldArray.length * 2)
+        System.arraycopy(oldArray, 0, newArray, 0, oldArray.length)
+        thread.locks = newArray
+      }
+    }
+  }
+
+  @inline
+  private def popLock(monitor: Monitor): Unit = {
+    val thread = ThreadBase.currentThreadInternal()
+    if (thread != null) {
+      if (thread.locks(thread.size - 1) == monitor) {
+        thread.size -= 1
+      }
+    }
   }
 }
 
