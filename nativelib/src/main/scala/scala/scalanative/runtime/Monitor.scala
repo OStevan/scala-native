@@ -1,6 +1,7 @@
 package scala.scalanative.runtime
 
 import scala.scalanative.native._
+import scala.scalanative.native.{stackalloc, CLong}
 import scala.scalanative.native.stdlib.malloc
 import scala.scalanative.posix.errno.{EBUSY, EPERM}
 import scala.scalanative.posix.pthread._
@@ -138,20 +139,21 @@ object Monitor {
     .asInstanceOf[Ptr[pthread_mutex_t]]
   pthread_mutex_init(monitorCreationMutexPtr, Monitor.mutexAttrPtr)
 
+  private val TAKE_LOCK = Long.MaxValue + 1
+
   def apply(x: java.lang.Object): Monitor = {
     val o = x.asInstanceOf[_Object]
-    if (o.__monitor != null) {
-      o.__monitor
+    val pointerToAtomic = o.cast[Ptr[CLong]] + 1L
+    val expected = stackalloc[CLong]
+    !expected = 0L
+
+    if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expected, TAKE_LOCK)) {
+      val monitor = new Monitor(x.isInstanceOf[ShadowLock])
+      Atomic.store_long(pointerToAtomic, monitor.cast[CLong])
+      monitor
     } else {
-      try {
-        pthread_mutex_lock(monitorCreationMutexPtr)
-        if (o.__monitor == null) {
-          o.__monitor = new Monitor(x.isInstanceOf[ShadowLock])
-        }
-        o.__monitor
-      } finally {
-        pthread_mutex_unlock(monitorCreationMutexPtr)
-      }
+      while (Atomic.load_long(pointerToAtomic) == TAKE_LOCK) {}
+      (!pointerToAtomic).cast[Monitor]
     }
   }
 }
