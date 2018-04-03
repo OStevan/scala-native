@@ -1,5 +1,7 @@
 package scala.scalanative.runtime
 
+
+import scala.scalanative.native.CCast
 import scala.scalanative.runtime.ThreadBase._
 
 abstract class ThreadBase {
@@ -9,13 +11,13 @@ abstract class ThreadBase {
   final def getLockState: Int                     = lockState
   private[runtime] def setLockState(s: Int): Unit = lockState = s
   // only here to implement holdsLock
-  private[runtime] var locks = new scala.Array[Object](8)
+  private[runtime] var locks = new scala.Array[java.lang._Object](8)
   private[runtime] var size  = 0
   final def holdsLock(obj: Object): scala.Boolean = {
     if (size == 0) {
       false
     } else {
-      val target = obj
+      val target = obj.cast[java.lang._Object]
       var i: Int = 0
       while (i < size && locks(i) != target) {
         i += 1

@@ -106,6 +106,7 @@ object Monitor {
 
   private val TAKE_LOCK = Long.MaxValue + 1
 
+
   def apply(x: java.lang.Object): Monitor = {
     val o = x.asInstanceOf[_Object]
     val pointerToAtomic = o.cast[Ptr[CLong]] + 1L
@@ -126,7 +127,7 @@ object Monitor {
     val monitor = Monitor(obj)
     monitor.enter()
     if (!obj.isInstanceOf[ShadowLock]) {
-      pushLock(monitor)
+      pushLock(obj)
     }
   }
 
@@ -143,11 +144,11 @@ object Monitor {
   private def pushLock(obj: Object): Unit = {
     val thread = ThreadBase.currentThreadInternal()
     if (thread != null) {
-      thread.locks(thread.size) = obj
+      thread.locks(thread.size) = obj.cast[java.lang._Object]
       thread.size += 1
       if (thread.size >= thread.locks.length) {
         val oldArray = thread.locks
-        val newArray = new scala.Array[Object](oldArray.length * 2)
+        val newArray = new scala.Array[java.lang._Object](oldArray.length * 2)
         System.arraycopy(oldArray, 0, newArray, 0, oldArray.length)
         thread.locks = newArray
       }
@@ -158,7 +159,7 @@ object Monitor {
   private def popLock(obj: Object): Unit = {
     val thread = ThreadBase.currentThreadInternal()
     if (thread != null) {
-      if (thread.locks(thread.size - 1) == obj) {
+      if (thread.locks(thread.size - 1) == obj.cast[java.lang._Object]) {
         thread.size -= 1
       }
     }
