@@ -133,21 +133,21 @@ object Monitor {
   def exit(obj: Object): Unit ={
     val monitor = Monitor(obj)
     if (!obj.isInstanceOf[ShadowLock])
-      popLock(monitor)
+      popLock(obj)
     monitor.exit()
   }
 
 
   // helpers
   @inline
-  private def pushLock(monitor: Monitor): Unit = {
+  private def pushLock(obj: Object): Unit = {
     val thread = ThreadBase.currentThreadInternal()
     if (thread != null) {
-      thread.locks(thread.size) = monitor
+      thread.locks(thread.size) = obj
       thread.size += 1
       if (thread.size >= thread.locks.length) {
         val oldArray = thread.locks
-        val newArray = new scala.Array[Monitor](oldArray.length * 2)
+        val newArray = new scala.Array[Object](oldArray.length * 2)
         System.arraycopy(oldArray, 0, newArray, 0, oldArray.length)
         thread.locks = newArray
       }
@@ -155,10 +155,10 @@ object Monitor {
   }
 
   @inline
-  private def popLock(monitor: Monitor): Unit = {
+  private def popLock(obj: Object): Unit = {
     val thread = ThreadBase.currentThreadInternal()
     if (thread != null) {
-      if (thread.locks(thread.size - 1) == monitor) {
+      if (thread.locks(thread.size - 1) == obj) {
         thread.size -= 1
       }
     }

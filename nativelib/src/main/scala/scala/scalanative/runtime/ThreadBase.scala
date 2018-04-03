@@ -9,13 +9,13 @@ abstract class ThreadBase {
   final def getLockState: Int                     = lockState
   private[runtime] def setLockState(s: Int): Unit = lockState = s
   // only here to implement holdsLock
-  private[runtime] var locks = new scala.Array[Monitor](8)
+  private[runtime] var locks = new scala.Array[Object](8)
   private[runtime] var size  = 0
   final def holdsLock(obj: Object): scala.Boolean = {
     if (size == 0) {
       false
     } else {
-      val target = Monitor(obj)
+      val target = obj
       var i: Int = 0
       while (i < size && locks(i) != target) {
         i += 1
@@ -26,7 +26,7 @@ abstract class ThreadBase {
   final def freeAllLocks(): Unit = {
     var i: Int = 0
     while (i < size) {
-      locks(i).exit()
+      Monitor.exit(locks(i))
       i += 1
     }
   }
