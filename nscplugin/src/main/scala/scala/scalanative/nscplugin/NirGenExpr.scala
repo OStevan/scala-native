@@ -1347,17 +1347,14 @@ trait NirGenExpr { self: NirGenPhase =>
     def genSynchronized(app: Apply): Val = {
       val Apply(Select(receiverp, _), List(argp)) = app
 
-      val monitor =
-        genApplyModuleMethod(RuntimeModule, GetMonitorMethod, Seq(receiverp))
-      val enter = genApplyMethod(RuntimeMonitorEnterMethod,
-                                statically = true,
-                                monitor,
-                                Seq())
+      // monitorenter
+      val monitorEnter = genApplyModuleMethod(RuntimeModule, MonitorEnterMethod, Seq(receiverp))
+
       val arg = genExpr(argp)
-      val exit = genApplyMethod(RuntimeMonitorExitMethod,
-                               statically = true,
-                               monitor,
-                               Seq())
+
+      // monitorexit
+      val monitorExit = genApplyModuleMethod(RuntimeModule, MonitorExitMethod, Seq(receiverp))
+
 
       arg
     }
