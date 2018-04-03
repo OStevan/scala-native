@@ -3,6 +3,7 @@ package java.lang
 import scala.scalanative.native._
 import scala.scalanative.runtime, runtime.ClassTypeOps
 import scala.scalanative.runtime.Intrinsics._
+import scala.scalanative.runtime.Monitor
 
 class _Object {
   var __monitor: scala.scalanative.runtime.Monitor = _
@@ -21,19 +22,19 @@ class _Object {
     new _Class(runtime.getType(this).cast[Ptr[runtime.Type]])
 
   @inline def __notify(): Unit =
-    runtime.getMonitor(this)._notify
+    runtime._notify(this)
 
   @inline def __notifyAll(): Unit =
-    runtime.getMonitor(this)._notifyAll
+    runtime._notifyAll(this)
 
   @inline def __wait(): Unit =
-    runtime.getMonitor(this)._wait
+    runtime._wait(this)
 
   @inline def __wait(timeout: scala.Long): Unit =
-    runtime.getMonitor(this)._wait(timeout)
+    runtime._wait(this, timeout)
 
   @inline def __wait(timeout: scala.Long, nanos: Int): Unit =
-    runtime.getMonitor(this)._wait(timeout, nanos)
+    runtime._wait(this, timeout, nanos)
 
   @inline def __scala_==(that: _Object): scala.Boolean = {
     // This implementation is only called for classes that don't override

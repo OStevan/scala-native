@@ -72,16 +72,24 @@ package object runtime {
   /** Read type information of given object. */
   def getType(obj: Object): Ptr[ClassType] = !obj.cast[Ptr[Ptr[ClassType]]]
 
-  /** Get monitor for given object. */
-  def getMonitor(obj: Object): Monitor = Monitor(obj)
-
   /** Monitor enter for a given object */
   def monitorEnter(obj: Object): Unit = Monitor.enter(obj)
 
   /** Monitor exit for a given object*/
   def monitorExit(obj: Object): Unit = Monitor.exit(obj)
 
-  /** Initialize runtime with given arguments and return the
+  def _notify(obj: Object): Unit = Monitor._notify(obj)
+
+  def _notifyAll(obj: Object): Unit = Monitor._notifyAll(obj)
+
+  def _wait(obj: Object): Unit = Monitor._wait(obj)
+
+  def _wait(obj: Object, millis: scala.Long): Unit = Monitor.wait(millis, 0)
+
+  def _wait(obj: Object, millis: scala.Long, nanos: Int): Unit = Monitor._wait(obj, millis, nanos)
+
+
+    /** Initialize runtime with given arguments and return the
    *  rest as Java-style array.
    */
   def init(argc: Int, argv: Ptr[Ptr[Byte]]): ObjectArray = {

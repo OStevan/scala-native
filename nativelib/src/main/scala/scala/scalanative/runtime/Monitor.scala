@@ -1,7 +1,7 @@
 package scala.scalanative.runtime
 
 import scala.scalanative.native._
-import scala.scalanative.native.{stackalloc, CLong}
+import scala.scalanative.native.{stackalloc, CLong, CCast}
 import scala.scalanative.native.stdlib.malloc
 import scala.scalanative.posix.errno.{EBUSY, EPERM}
 import scala.scalanative.posix.pthread._
@@ -32,18 +32,8 @@ final class Monitor private[runtime] {
 
   def _notify(): Unit    = pthread_cond_signal(condPtr)
   def _notifyAll(): Unit = pthread_cond_broadcast(condPtr)
-  def _wait(): Unit = {
-    val thread = ThreadBase.currentThreadInternal
-    if (thread != null) {
-      thread.setLockState(Waiting)
-    }
-    val returnVal = pthread_cond_wait(condPtr, mutexPtr)
-    if (thread != null) {
-      thread.setLockState(Normal)
-    }
-    if (returnVal == EPERM) {
-      throw new IllegalMonitorStateException()
-    }
+  def _wait(): CInt = {
+    pthread_cond_wait(condPtr, mutexPtr)
   }
   def _wait(millis: scala.Long): Unit = _wait(millis, 0)
   def _wait(millis: scala.Long, nanos: Int): Unit = {
@@ -225,6 +215,83 @@ object Monitor {
     // fat lock unlock
     val monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
     monitor.exit()
+  }
+
+  // this makes no sense
+
+  def _notify(obj: Object): Unit    = {
+    val lockValue = Atomic.load_long(obj.cast[Ptr[CLong]] + 1L)
+    if ((lockValue & LOCK_TYPE_MASK) != 0)
+      (lockValue & MONITOR_POINTER_MASK).cast[Monitor]._notify()
+  }
+
+  def _notifyAll(obj: Object): Unit = {
+    val lockValue = Atomic.load_long(obj.cast[Ptr[CLong]] + 1L)
+    if ((lockValue & LOCK_TYPE_MASK) != 0)
+      (lockValue & MONITOR_POINTER_MASK).cast[Monitor]._notifyAll()
+  }
+
+  def _wait(obj: Object): Unit = {
+    val thread = ThreadBase.currentThreadInternal
+    if (thread != null) {
+      thread.setLockState(Waiting)
+    }
+
+    val lockValue = Atomic.load_long(obj.cast[Ptr[CLong]] + 1L)
+    if ((lockValue & LOCK_TYPE_MASK) != 0) {
+      // fat monitor wait
+      if ((lockValue & MONITOR_POINTER_MASK).cast[Monitor]._wait() == EPERM)
+        throw new IllegalMonitorStateException()
+    } else if (obj.isInstanceOf[ShadowLock]) {
+      // thin monitor inflate and enter a specified number of times
+      if ((lockValue & THREAD_ID_MASK) != ThreadBase.currentThreadInternal().getId)
+        throw new IllegalMonitorStateException()
+      var numberOfEntries = ((lockValue & RECURSION_MASK) >> 16) + 1
+      val monitor = Monitor(obj)
+      while (numberOfEntries > 0) {
+        monitor.enter()
+        numberOfEntries -= 1
+      }
+      monitor.wait()
+    } else
+      // not possible
+      throw new IllegalMonitorStateException()
+
+    if (thread != null) {
+      thread.setLockState(Normal)
+    }
+  }
+  def _wait(obj: Object, millis: scala.Long): Unit = Monitor.wait(millis, 0)
+  def _wait(obj: Object, millis: scala.Long, nanos: Int): Unit = {
+    val thread = ThreadBase.currentThreadInternal
+    if (thread != null) {
+      thread.setLockState(TimedWaiting)
+    }
+
+    val lockValue = Atomic.load_long(obj.cast[Ptr[CLong]] + 1L)
+    if ((lockValue & LOCK_TYPE_MASK) != 0) {
+      // fat monitor wait
+      if ((lockValue & MONITOR_POINTER_MASK).cast[Monitor]._wait(millis, nanos) == EPERM)
+        throw new IllegalMonitorStateException()
+    } else if (obj.cast[Object].isInstanceOf[ShadowLock]) {
+      // thin monitor inflate and enter a specified number of times
+      if ((lockValue & THREAD_ID_MASK) != ThreadBase.currentThreadInternal().getId)
+        throw new IllegalMonitorStateException()
+      var numberOfEntries = ((lockValue & RECURSION_MASK) >> 16) + 1
+      val monitor = Monitor(obj)
+      while (numberOfEntries > 0) {
+        monitor.enter()
+        numberOfEntries -= 1
+      }
+      if (monitor._wait(millis, nanos) == EPERM)
+        throw new IllegalMonitorStateException()
+    } else
+    // not possible
+      throw new IllegalMonitorStateException()
+
+    if (thread != null) {
+      thread.setLockState(Normal)
+    }
   }
 
 
