@@ -18,7 +18,7 @@ import scala.scalanative.posix.sys.types.{
 }
 import scala.scalanative.runtime.ThreadBase._
 
-final class Monitor private[runtime] (val shadow: Boolean) {
+final class Monitor private[runtime] {
   // memory leak
   // TODO destroy the mutex and release the memory
   private val mutexPtr: Ptr[pthread_mutex_t] = malloc(pthread_mutex_t_size)
@@ -103,10 +103,6 @@ object Monitor {
   pthread_condattr_init(condAttrPtr)
   pthread_condattr_setpshared(condAttrPtr, PTHREAD_PROCESS_SHARED)
 
-  private[runtime] val monitorCreationMutexPtr: Ptr[pthread_mutex_t] = malloc(
-    pthread_mutex_t_size)
-    .asInstanceOf[Ptr[pthread_mutex_t]]
-  pthread_mutex_init(monitorCreationMutexPtr, Monitor.mutexAttrPtr)
 
   private val TAKE_LOCK = Long.MaxValue + 1
 
@@ -117,7 +113,7 @@ object Monitor {
     !expected = 0L
 
     if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expected, TAKE_LOCK)) {
-      val monitor = new Monitor(x.isInstanceOf[ShadowLock])
+      val monitor = new Monitor
       Atomic.store_long(pointerToAtomic, monitor.cast[CLong])
       monitor
     } else {
@@ -129,14 +125,14 @@ object Monitor {
   def enter(obj: Object): Unit = {
     val monitor = Monitor(obj)
     monitor.enter()
-    if (!monitor.shadow) {
+    if (!obj.isInstanceOf[ShadowLock]) {
       pushLock(monitor)
     }
   }
 
   def exit(obj: Object): Unit ={
     val monitor = Monitor(obj)
-    if (!monitor.shadow)
+    if (!obj.isInstanceOf[ShadowLock])
       popLock(monitor)
     monitor.exit()
   }
