@@ -134,9 +134,6 @@ object Monitor {
       }
       lockValue = Atomic.load_long(pointerToAtomic)
     }
-
-    monitor.enter()
-
     monitor
   }
 
@@ -149,11 +146,11 @@ object Monitor {
   private def inflateLock(expectedPtr: Ptr[CLong], pointerToAtomic: Ptr[CLong]): Monitor = {
     if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, TAKE_LOCK)) {
       val monitor = new Monitor
-      Atomic.store_long(pointerToAtomic, monitor.cast[CLong])
+      Atomic.store_long(pointerToAtomic, monitor.cast[CLong] | LOCK_TYPE_MASK)
       monitor
     } else {
       while (Atomic.load_long(pointerToAtomic) == TAKE_LOCK) {}
-      (!pointerToAtomic).cast[Monitor]
+      ((!pointerToAtomic) & MONITOR_POINTER_MASK).cast[Monitor]
     }
   }
 
@@ -197,10 +194,36 @@ object Monitor {
     }
   }
 
-  def exit(obj: Object): Unit ={
-    val monitor = Monitor(obj)
-    if (!obj.isInstanceOf[ShadowLock])
+  def exit(obj: Object): Unit = {
+
+    if (!obj.isInstanceOf[ShadowLock]) {
       popLock(obj)
+    }
+
+    val o = obj.asInstanceOf[_Object]
+    // cast to pointer and move to the address locking part of the header
+    val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1L
+
+    val lockValue = Atomic.load_long(pointerToAtomic)
+    var threadID: CLong = 1L
+
+    if (!obj.isInstanceOf[ShadowLock])
+      threadID = ThreadBase.currentThreadInternal().getId
+
+    // thin lock top most unlock
+    if (lockValue == threadID) {
+      Atomic.store_long(pointerToAtomic, 0L)
+      return
+    }
+
+    // thin lock recursive unlock
+    if ((lockValue & LOCK_TYPE_MASK) == 0) {
+      Atomic.store_long(pointerToAtomic, lockValue - RECURSION_INCREMENT)
+      return
+    }
+
+    // fat lock unlock
+    val monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
     monitor.exit()
   }
 
