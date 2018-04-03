@@ -76,10 +76,10 @@ package object runtime {
   def getMonitor(obj: Object): Monitor = Monitor(obj)
 
   /** Monitor enter for a given object */
-  def monitorEnter(obj: Object): Unit = Monitor(obj).enter()
+  def monitorEnter(obj: Object): Unit = Monitor.enter(obj)
 
   /** Monitor exit for a given object*/
-  def monitorExit(obj: Object): Unit = Monitor(obj).exit()
+  def monitorExit(obj: Object): Unit = Monitor.exit(obj)
 
   /** Initialize runtime with given arguments and return the
    *  rest as Java-style array.

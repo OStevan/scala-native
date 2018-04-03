@@ -156,6 +156,16 @@ object Monitor {
       (!pointerToAtomic).cast[Monitor]
     }
   }
+
+  def enter(obj: Object): Unit = {
+    val monitor = Monitor(obj)
+    monitor.enter()
+  }
+
+  def exit(obj: Object): Unit ={
+    val monitor = Monitor(obj)
+    monitor.exit()
+  }
 }
 
 /**
