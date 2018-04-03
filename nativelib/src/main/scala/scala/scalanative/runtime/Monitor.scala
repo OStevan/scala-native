@@ -106,14 +106,48 @@ object Monitor {
 
   private val TAKE_LOCK = Long.MaxValue + 1
 
+  final val LOCK_TYPE_MASK: CLong = Long.MaxValue + 1
+  final val MONITOR_POINTER_MASK: CLong = 0x0FFFFFFFFFFFFL
+  final val RECURSION_INCREMENT: CLong = 0x01000L
+  final val RECURSION_MASK: CLong = 0x0FF0000L
+  final val THREAD_ID_MASK: CLong = 0x0FFFFL | LOCK_TYPE_MASK
 
-  def apply(x: java.lang.Object): Monitor = {
-    val o = x.asInstanceOf[_Object]
-    val pointerToAtomic = o.cast[Ptr[CLong]] + 1L
-    val expected = stackalloc[CLong]
-    !expected = 0L
 
-    if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expected, TAKE_LOCK)) {
+  private def inflateLock(expectedPtr: Ptr[CLong], threadID: CLong, pointerToAtomic: Ptr[CLong], flag: Boolean): Monitor = {
+    var monitor: Monitor = new Monitor
+    var obtainedMonitor = false
+
+    var lockValue = Atomic.load_long(pointerToAtomic)
+
+    while (!obtainedMonitor) {
+      if ((lockValue & LOCK_TYPE_MASK) != 0) {
+        // fat lock enter
+        monitor = (lockValue & MONITOR_POINTER_MASK).cast[Ptr[CLong]].cast[Monitor]
+        obtainedMonitor = true
+      } else {
+        // obtain the thin lock and inflate it
+        if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, threadID)) {
+          val monitorCasted = monitor.cast[Ptr[Byte]].cast[CLong]
+          Atomic.store_long(pointerToAtomic, monitorCasted | LOCK_TYPE_MASK)
+          obtainedMonitor = true
+        }
+      }
+      lockValue = Atomic.load_long(pointerToAtomic)
+    }
+
+    monitor.enter()
+
+    monitor
+  }
+
+  /**
+    * Called for a shadow lock, immediate inflation
+    * @param expectedPtr
+    * @param pointerToAtomic
+    * @return
+    */
+  private def inflateLock(expectedPtr: Ptr[CLong], pointerToAtomic: Ptr[CLong]): Monitor = {
+    if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, TAKE_LOCK)) {
       val monitor = new Monitor
       Atomic.store_long(pointerToAtomic, monitor.cast[CLong])
       monitor
@@ -122,6 +156,38 @@ object Monitor {
       (!pointerToAtomic).cast[Monitor]
     }
   }
+
+  def apply(x: java.lang.Object): Monitor = {
+    val o = x.asInstanceOf[_Object]
+    val pointerToAtomic = o.cast[Ptr[CLong]] + 1L
+    val expected = stackalloc[CLong]
+    !expected = 0L
+
+    if (x.isInstanceOf[ShadowLock]) {
+      inflateLock(expected, pointerToAtomic)
+    } else {
+      inflateLock(expected, ThreadBase.currentThreadInternal().getId, pointerToAtomic, x.isInstanceOf[ShadowLock])
+    }
+  }
+
+
+//  def apply(x: java.lang.Object): Monitor = {
+//    val o = x.asInstanceOf[_Object]
+//    val pointerToAtomic = o.cast[Ptr[CLong]] + 1L
+//    val expected = stackalloc[CLong]
+//    !expected = 0L
+//
+//    ThreadBase.currentThreadInternal()
+//
+//    if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expected, TAKE_LOCK)) {
+//      val monitor = new Monitor
+//      Atomic.store_long(pointerToAtomic, monitor.cast[CLong])
+//      monitor
+//    } else {
+//      while (Atomic.load_long(pointerToAtomic) == TAKE_LOCK) {}
+//      (!pointerToAtomic).cast[Monitor]
+//    }
+//  }
 
   def enter(obj: Object): Unit = {
     val monitor = Monitor(obj)
