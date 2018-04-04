@@ -2,30 +2,11 @@ package java.lang
 
 import java.util
 
-import scala.scalanative.native.{
-  CCast,
-  CFunctionPtr,
-  CInt,
-  Ptr,
-  ULong,
-  signal,
-  sizeof,
-  stackalloc
-}
+import scala.scalanative.native.{CCast, CFunctionPtr, CInt, CLong, Ptr, ULong, signal, sizeof, stackalloc}
 import scala.scalanative.posix.pthread._
 import scala.scalanative.posix.sched._
-import scala.scalanative.posix.sys.types.{
-  pthread_attr_t,
-  pthread_key_t,
-  pthread_t
-}
-import scala.scalanative.runtime.{
-  CAtomicInt,
-  CAtomicLong,
-  NativeThread,
-  ShadowLock,
-  ThreadBase
-}
+import scala.scalanative.posix.sys.types.{pthread_attr_t, pthread_key_t, pthread_t}
+import scala.scalanative.runtime.{CAtomicInt, CAtomicLong, NativeThread, ShadowLock, ThreadBase}
 
 // Ported from Harmony
 
@@ -164,7 +145,9 @@ class Thread private (
   final def join(): Unit = {
     if (isAlive) {
       joinMutex.synchronized {
-        while (isAlive) joinMutex.wait()
+        while (isAlive) {
+          joinMutex.wait()
+        }
       }
     }
   }
@@ -523,7 +506,7 @@ object Thread extends scala.scalanative.runtime.ThreadModuleBase {
   private var defaultExceptionHandler: UncaughtExceptionHandler = _
 
   // Counter used to generate thread's ID
-  private val threadOrdinalNum = CAtomicLong(0L)
+  private val threadOrdinalNum = CAtomicLong(1L)
 
   // used to generate a default thread name
   private final val THREAD: String = "Thread-"
@@ -614,7 +597,7 @@ object Thread extends scala.scalanative.runtime.ThreadModuleBase {
   def setDefaultUncaughtExceptionHandler(eh: UncaughtExceptionHandler): Unit =
     defaultExceptionHandler = eh
 
-  private def getNextThreadId: scala.Long = threadOrdinalNum.addFetch(1)
+  private def getNextThreadId: scala.Long = threadOrdinalNum.fetchAdd(1)
 
   def interrupted(): scala.Boolean = {
     val current = currentThread()
