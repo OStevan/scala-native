@@ -59,7 +59,7 @@ final class Monitor private[runtime] {
     }
     returnVal
   }
-  def enter(): Unit = {
+  def _enter(): Unit = {
     if (pthread_mutex_trylock(mutexPtr) == EBUSY) {
       val thread = ThreadBase.currentThreadInternal()
       if (thread != null) {
@@ -92,13 +92,13 @@ object Monitor {
   pthread_condattr_setpshared(condAttrPtr, PTHREAD_PROCESS_SHARED)
 
 
-  private val TAKE_LOCK = Long.MinValue
+  private val TAKE_LOCK = 0x8000000000000000L
 
-  final val LOCK_TYPE_MASK: CLong = Long.MinValue
+  final val LOCK_TYPE_MASK: CLong = 0x8000000000000000L
   final val MONITOR_POINTER_MASK: CLong = 0x0FFFFFFFFFFFFL
   final val RECURSION_INCREMENT: CLong = 0x010000L
   final val RECURSION_MASK: CLong = 0x0FF0000L
-  final val THREAD_ID_MASK: CLong = 0x0FFFFL | LOCK_TYPE_MASK
+  final val THREAD_ID_MASK: CLong = 0x0FFFFL
 
 
   private def inflateLock(expectedPtr: Ptr[CLong], threadID: CLong, pointerToAtomic: Ptr[CLong]): Monitor = {
@@ -108,14 +108,16 @@ object Monitor {
       lockValue = Atomic.load_long(pointerToAtomic)
       if ((lockValue & LOCK_TYPE_MASK) != 0) {
         // fat lock enter
-        (lockValue & MONITOR_POINTER_MASK).cast[Monitor].enter()
-        return (lockValue & MONITOR_POINTER_MASK).cast[Monitor]
+        (lockValue & MONITOR_POINTER_MASK).cast[Monitor]._enter()
+        return (lockValue & MONITOR_POINTER_MASK).cast[Ptr[Monitor]].cast[Monitor]
       } else {
         // obtain the thin lock and inflate it
-        if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, threadID)) {
-          val monitorCasted = (new Monitor).cast[CLong]
-          monitorCasted.cast[Monitor].enter()
-          Atomic.store_long(pointerToAtomic, monitorCasted | LOCK_TYPE_MASK)
+        !expectedPtr = 0L
+        if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, threadID + RECURSION_INCREMENT)
+          || (lockValue & THREAD_ID_MASK) == threadID) {
+          val monitorCasted = (new Monitor).cast[Ptr[Monitor]]
+          monitorCasted.cast[Monitor]._enter()
+          Atomic.store_long(pointerToAtomic, monitorCasted.cast[CLong] | LOCK_TYPE_MASK)
           return monitorCasted.cast[Monitor]
         }
       }
@@ -132,19 +134,19 @@ object Monitor {
   private def inflateLock(expectedPtr: Ptr[CLong], pointerToAtomic: Ptr[CLong]): Monitor = {
     if (Atomic.compare_and_swap_strong_long(pointerToAtomic, expectedPtr, TAKE_LOCK)) {
       val monitor = new Monitor
-      monitor.enter()
-      Atomic.store_long(pointerToAtomic, monitor.cast[CLong] | LOCK_TYPE_MASK)
+      monitor._enter()
+      Atomic.store_long(pointerToAtomic, monitor.cast[Ptr[Monitor]].cast[CLong] | LOCK_TYPE_MASK)
       monitor
     } else {
       while (Atomic.load_long(pointerToAtomic) == TAKE_LOCK) {}
-      val casted = (Atomic.load_long(pointerToAtomic) & MONITOR_POINTER_MASK).cast[Monitor]
-      casted.enter()
+      val casted = (Atomic.load_long(pointerToAtomic) & MONITOR_POINTER_MASK).cast[Ptr[Monitor]].cast[Monitor]
+      casted._enter()
       casted
     }
   }
 
   def apply(x: java.lang.Object): Monitor = {
-    val o = x.asInstanceOf[_Object]
+    val o = x.cast[_Object]
     val pointerToAtomic = o.cast[Ptr[CLong]] + 1L
     val expected = stackalloc[CLong]
     !expected = 0L
@@ -158,6 +160,8 @@ object Monitor {
 
   def enter(obj: java.lang.Object): Unit = {
 
+    val o = obj.cast[_Object]
+
     if (obj.isInstanceOf[ShadowLock]) {
       Monitor(obj)
       return
@@ -170,7 +174,7 @@ object Monitor {
 
 
     // cast to pointer and move to the address locking part of the header
-    val pointerToAtomic: Ptr[CLong] = obj.cast[Ptr[CLong]] + 1L
+    val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1L
 
 
     val threadID = ThreadBase.currentThreadInternal().getId
@@ -199,20 +203,19 @@ object Monitor {
 
   def exit(obj: Object): Unit = {
 
-    val o = obj.asInstanceOf[_Object]
+    val o = obj.cast[_Object]
     // cast to pointer and move to the address locking part of the header
     val pointerToAtomic: Ptr[CLong] = o.cast[Ptr[CLong]] + 1L
 
-    val lockValue = Atomic.load_long(pointerToAtomic)
+    val lockValue: CLong = Atomic.load_long(pointerToAtomic)
 
     if (obj.isInstanceOf[ShadowLock]) {
-      (lockValue & MONITOR_POINTER_MASK).cast[Monitor].exit()
+      (lockValue & MONITOR_POINTER_MASK).cast[Ptr[Monitor]].cast[Monitor].exit()
       return
     }
-
     popLock(obj)
 
-    val threadID = ThreadBase.currentThreadInternal().getId
+    val threadID: CLong = ThreadBase.currentThreadInternal().getId
 
     // thin lock top most unlock
     if (lockValue == (threadID + RECURSION_INCREMENT)) {
@@ -227,7 +230,7 @@ object Monitor {
     }
 
     // fat lock unlock
-     (lockValue & MONITOR_POINTER_MASK).cast[Monitor].exit()
+    (lockValue & MONITOR_POINTER_MASK).cast[Ptr[Byte]].cast[Monitor].exit()
   }
 
   // this makes no sense
@@ -268,7 +271,7 @@ object Monitor {
       var numberOfEntries = (lockValue & RECURSION_MASK) - RECURSION_INCREMENT
       val monitor = Monitor(obj)
       while (numberOfEntries > 0) {
-        monitor.enter()
+        monitor._enter()
         numberOfEntries -= RECURSION_INCREMENT
       }
       monitor._wait()
@@ -300,7 +303,7 @@ object Monitor {
       var numberOfEntries = (lockValue & RECURSION_MASK) - RECURSION_INCREMENT
       val monitor = Monitor(obj)
       while (numberOfEntries > 0) {
-        monitor.enter()
+        monitor._enter()
         numberOfEntries -= RECURSION_INCREMENT
       }
       if (monitor._wait(millis, nanos) == EPERM)
