@@ -8,13 +8,14 @@ import java.util.concurrent.locks.ReentrantLock
 import java.util
 import java.util.{NoSuchElementException, concurrent}
 
-import sun.reflect.generics.reflectiveObjects.NotImplementedException
 
 class LinkedBlockingQueue[E](
     private final val capacity: Int = Integer.MAX_VALUE)
     extends java.util.AbstractQueue[E]
     with BlockingQueue[E]
     with java.io.Serializable {
+
+  def this() = this(Integer.MAX_VALUE)
 
   import LinkedBlockingQueue._
 
@@ -313,7 +314,7 @@ class LinkedBlockingQueue[E](
     }
   }
 
-  override def contains(o: Any): Boolean = throw new NotImplementedException()
+  override def contains(o: Any): Boolean = ???
 
   override def toArray: Array[Object] = {
     fullyLock()
