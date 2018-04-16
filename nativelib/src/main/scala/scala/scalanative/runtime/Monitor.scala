@@ -296,7 +296,7 @@ object Monitor {
       // fat monitor wait
       if ((lockValue & MONITOR_POINTER_MASK).cast[Monitor]._wait(millis, nanos) == EPERM)
         throw new IllegalMonitorStateException()
-    } else if (obj.cast[Object].isInstanceOf[ShadowLock]) {
+    } else {
       // thin monitor inflate and enter a specified number of times
       if ((lockValue & THREAD_ID_MASK) != ThreadBase.currentThreadInternal().getId)
         throw new IllegalMonitorStateException()
@@ -308,9 +308,26 @@ object Monitor {
       }
       if (monitor._wait(millis, nanos) == EPERM)
         throw new IllegalMonitorStateException()
-    } else
-    // not possible
-      throw new IllegalMonitorStateException()
+    }
+//    if ((lockValue & LOCK_TYPE_MASK) != 0) {
+//      // fat monitor wait
+//      if ((lockValue & MONITOR_POINTER_MASK).cast[Monitor]._wait(millis, nanos) == EPERM)
+//        throw new IllegalMonitorStateException()
+//    } else if (obj.cast[Object].isInstanceOf[ShadowLock]) {
+//      // thin monitor inflate and enter a specified number of times
+//      if ((lockValue & THREAD_ID_MASK) != ThreadBase.currentThreadInternal().getId)
+//        throw new IllegalMonitorStateException()
+//      var numberOfEntries = (lockValue & RECURSION_MASK) - RECURSION_INCREMENT
+//      val monitor = Monitor(obj)
+//      while (numberOfEntries > 0) {
+//        monitor._enter()
+//        numberOfEntries -= RECURSION_INCREMENT
+//      }
+//      if (monitor._wait(millis, nanos) == EPERM)
+//        throw new IllegalMonitorStateException()
+//    } else
+//    // not possible
+//      throw new IllegalMonitorStateException()
 
     if (thread != null) {
       thread.setLockState(Normal)
