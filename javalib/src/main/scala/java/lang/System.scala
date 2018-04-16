@@ -1,7 +1,9 @@
 package java.lang
 
 import java.io._
+import java.security.Policy
 import java.util.{Collections, HashMap, Map, Properties}
+
 import scala.scalanative.native._
 import scala.scalanative.posix.unistd
 import scala.scalanative.runtime.time
@@ -137,5 +139,25 @@ object System {
     }
 
     Collections.unmodifiableMap(map)
+  }
+
+  var security: SecurityManager = _
+
+  var security_initialized = false
+
+  def setSecurityManager(sm: SecurityManager): Unit = {
+    if (!security_initialized) {
+      try {
+        Policy.getPolicy
+      } catch {
+        case _: Exception =>
+      }
+      security_initialized = true
+    }
+    security = sm
+  }
+
+  def getSecurityManager(): SecurityManager = {
+    security
   }
 }
