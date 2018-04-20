@@ -446,7 +446,8 @@ lazy val sandbox =
     .settings(
       // nativeOptimizerReporter := OptimizerReporter.toDirectory(
       //   crossTarget.value),
-      scalaVersion := libScalaVersion
+      scalaVersion := libScalaVersion,
+      nativeLinkStubs := true
     )
     .enablePlugins(ScalaNativePlugin)
 

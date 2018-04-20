@@ -34,4 +34,5 @@ trait ExecutorService extends Executor {
                    timeout: Long,
                    unit: TimeUnit): T
 
+  def shutdown(): Unit
 }

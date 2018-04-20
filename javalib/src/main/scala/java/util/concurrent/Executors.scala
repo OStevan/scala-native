@@ -22,4 +22,12 @@ object Executors {
 
   }
 
+  def defaultThreadFactory(): ThreadFactory = ???
+
+  def newFixedThreadPool(nThreads: Int): ExecutorService = {
+    new ThreadPoolExecutor(nThreads, nThreads,
+      0L, TimeUnit.MILLISECONDS,
+      new LinkedBlockingQueue[Runnable]())
+  }
+
 }
