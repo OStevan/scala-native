@@ -57,10 +57,14 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
   override def shutdown(): Unit = {
     val mainLock = this.mainLock
     mainLock.lock()
+    println("inside lock")
     try {
       checkShutdownAccess()
+      println("advance run state")
       advanceRunState(ThreadPoolExecutor.SHUTDOWN)
+      println("interrupt idle workers")
       interruptIdleWorkers()
+      println("on shutdown")
       onShutdown()
     } finally {
       mainLock.unlock()
@@ -420,20 +424,6 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
   }
 
   private def checkShutdownAccess(): Unit = {
-    val securityManager: SecurityManager = System.getSecurityManager
-    if (securityManager != null) {
-      securityManager.checkPermission(ThreadPoolExecutor.shutdownPerm)
-      val mainLock: ReentrantLock = this.mainLock
-      mainLock.lock()
-      try {
-        var iterator = workers.iterator()
-        while (iterator.hasNext) {
-          securityManager.checkAccess(iterator.next().thread)
-        }
-      } finally {
-        mainLock.unlock()
-      }
-    }
   }
 
   private def interruptWorkers(): Unit = {

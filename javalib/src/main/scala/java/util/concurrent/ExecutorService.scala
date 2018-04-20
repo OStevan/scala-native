@@ -3,8 +3,6 @@ package concurrent
 
 // Ported from Harmony
 
-import java.security.{PrivilegedAction, PrivilegedExceptionAction}
-
 trait ExecutorService extends Executor {
 
   def shutdownNow: java.util.List[Runnable]
