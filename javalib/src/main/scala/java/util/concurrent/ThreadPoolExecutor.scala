@@ -1,11 +1,11 @@
 package java.util.concurrent
 import java.util
-
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.{AbstractQueuedSynchronizer, Condition, ReentrantLock}
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import scala.compat.Platform.ConcurrentModificationException
+import scala.scalanative.native.CInt
 
 // Ported from Harmony
 // https://github.com/apache/harmony/blob/724deb045a85b722c961d8b5a83ac7a697319441/classlib/modules/concurrent/src/main/java/java/util/concurrent/ThreadPoolExecutor.java
@@ -57,14 +57,10 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
   override def shutdown(): Unit = {
     val mainLock = this.mainLock
     mainLock.lock()
-    println("inside lock")
     try {
       checkShutdownAccess()
-      println("advance run state")
       advanceRunState(ThreadPoolExecutor.SHUTDOWN)
-      println("interrupt idle workers")
       interruptIdleWorkers()
-      println("on shutdown")
       onShutdown()
     } finally {
       mainLock.unlock()
@@ -449,8 +445,9 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
     mainLock.lock()
     try {
       val iterator = workers.iterator()
+      var worker: Worker = null
       while (iterator.hasNext) {
-        val worker = iterator.next()
+        worker = iterator.next()
         val thread: Thread = worker.thread
         if (!thread.isInterrupted && worker.tryLock()) {
           try {
@@ -461,7 +458,6 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
             worker.unlock()
           }
         }
-
       }
     } finally {
       mainLock.unlock()
@@ -607,49 +603,55 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
   }
 
   private def getTask(timedOut: Boolean = false): Runnable = {
-    var c = ctl.get()
-    val rs = ThreadPoolExecutor.runStateOf(c)
+    var timedOut = false
+    var retry = false
+    while (true) {
+      retry = false
+      var c = ctl.get()
+      var rs = ThreadPoolExecutor.runStateOf(c)
 
-    if (rs >= ThreadPoolExecutor.SHUTDOWN && (rs >= ThreadPoolExecutor.STOP || workQueue.isEmpty)) {
-      decrementWorkerCount()
-      return null
-    }
 
-    var timed = false
+      if (rs >= ThreadPoolExecutor.SHUTDOWN && (rs >= ThreadPoolExecutor.STOP || workQueue.isEmpty)) {
+        decrementWorkerCount()
+        return null
+      }
 
-    innerLoop() match {
-      case 0 => return null
-      case 2 => getTask(timedOut)
-      case _ =>
-    }
+      var timed = false
+      var breakInner = false
 
-    def innerLoop(): Int = {
-      val wc = ThreadPoolExecutor.workerCountOf(c)
-      timed = allowCoreThreadTimeOut || wc > corePoolSize
+      while (!retry && !breakInner) {
+        val wc = ThreadPoolExecutor.workerCountOf(c)
+        timed = allowCoreThreadTimeOut || wc > corePoolSize
 
-      if (wc <= maximumPoolSize && !(timedOut && timed)) {
-        1
-      } else if (compareAndDecrementWorkerCount(c)) {
-        0
-      } else {
-        c = ctl.get()
+        if (!(wc <= maximumPoolSize && !(timedOut && timed))) {
+          if (compareAndDecrementWorkerCount(c))
+            return null
 
-        if (ThreadPoolExecutor.runStateOf(c) != rs) {
-          2
+          c = ctl.get()
+
+          if (ThreadPoolExecutor.runStateOf(c) != rs)
+            retry = true
         } else
-          innerLoop()
+          breakInner = true
+      }
+
+      if (!retry) {
+        try {
+          val runnable = if (timed)
+            workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS)
+          else
+            workQueue.take()
+
+          if (runnable != null)
+            return runnable
+          timedOut = true
+        }catch {
+          case _:InterruptedException => timedOut = false
+        }
       }
     }
 
-    try {
-      val r: Runnable = if (timed) workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS) else workQueue.take
-      if (r != null)
-        return r
-      getTask(true)
-    } catch {
-      case _: InterruptedException => getTask(false)
-    }
-
+    null
   }
 
   protected[concurrent] def runWorker(worker: Worker): Unit = {
@@ -680,12 +682,12 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
           worker.completedTasks += 1
           worker.unlock()
         }
-        completedAbruptly = false
+        task = getTask()
       }
+      completedAbruptly = false
     } finally {
       processWorkerExit(worker, completedAbruptly)
     }
-
   }
 }
 
@@ -711,16 +713,16 @@ object ThreadPoolExecutor {
       }
   }
 
-  private val COUNT_BITS = Integer.SIZE - 3
-  private val CAPACITY = (1 << COUNT_BITS) - 1
+  private val COUNT_BITS: CInt = Integer.SIZE - 3
+  private val CAPACITY: CInt = (1 << COUNT_BITS) - 1
   private val ONLY_ONE = true
 
   // runState is stored in the high-order bits
-  private val RUNNING = -1 << COUNT_BITS
-  private val SHUTDOWN = 0 << COUNT_BITS
-  private val STOP = 1 << COUNT_BITS
-  private val TIDYING = 2 << COUNT_BITS
-  private val TERMINATED = 3 << COUNT_BITS
+  private val RUNNING: CInt = -1 << COUNT_BITS
+  private val SHUTDOWN: CInt = 0 << COUNT_BITS
+  private val STOP: CInt = 1 << COUNT_BITS
+  private val TIDYING: CInt = 2 << COUNT_BITS
+  private val TERMINATED: CInt = 3 << COUNT_BITS
 
   // Packing and unpacking ctl
   private def runStateOf(capacity: Int) = capacity & ~CAPACITY

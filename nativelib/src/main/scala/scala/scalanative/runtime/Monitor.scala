@@ -275,6 +275,7 @@ object Monitor {
         numberOfEntries -= RECURSION_INCREMENT
       }
       monitor._wait()
+      thread.getLockState
     }
 
     if (thread != null) {

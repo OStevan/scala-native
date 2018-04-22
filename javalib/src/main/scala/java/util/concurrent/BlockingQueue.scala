@@ -13,7 +13,7 @@ trait BlockingQueue[E] extends java.util.Queue[E] {
 
   def offer(e: E, timeout: Long, unit: TimeUnit): Boolean
 
-  def take: E
+  def take(): E
 
   def poll(timeout: Long, unit: TimeUnit): E
 

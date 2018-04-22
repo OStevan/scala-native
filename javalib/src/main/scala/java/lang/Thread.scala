@@ -62,6 +62,22 @@ class Thread private (
   private val joinMutex    = new Object
   private val suspendMutex = new Object
   private var suspendState = internalNotSuspended
+  private var parked: Object = _
+
+  // possible solution to park
+  def threadPark() = {
+    this.synchronized {
+      parked = this
+      this.wait()
+    }
+  }
+
+  def threadUnpark() = {
+    this.synchronized {
+      parked = null
+      this.notify()
+    }
+  }
 
   var localValues: ThreadLocal.Values = _
 
@@ -128,6 +144,10 @@ class Thread private (
     sleepMutex.synchronized {
       sleepMutex.notify()
     }
+    if (parked != null)
+      parked.synchronized {
+        parked.notify()
+      }
   }
 
   final def isAlive: scala.Boolean = {
