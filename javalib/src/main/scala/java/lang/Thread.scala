@@ -61,21 +61,23 @@ class Thread private (
   private val sleepMutex   = new Object
   private val joinMutex    = new Object
   private val suspendMutex = new Object
+  private val parkItself   = new Object
   private var suspendState = internalNotSuspended
   private var parked: Object = _
 
   // possible solution to park
   def threadPark() = {
-    this.synchronized {
-      parked = this
-      this.wait()
+    parkItself.synchronized {
+      parked = parkItself
+      parked.wait()
     }
   }
 
   def threadUnpark() = {
-    this.synchronized {
-      parked = null
-      this.notify()
+    val parked = this.parked
+    parked.synchronized {
+      this.parked = null
+      parked.notify()
     }
   }
 

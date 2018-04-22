@@ -321,6 +321,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
       c = ctl.get()
     }
 
+
     if (ThreadPoolExecutor.isRunning(c) && workQueue.offer(command)) {
       val recheck = ctl.get()
       if (!ThreadPoolExecutor.isRunning(recheck) && remove(command))
@@ -331,9 +332,9 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
       reject(command)
   }
 
-  private def compareAndIncrementWorkerCount(expect: Int) = ctl.compareAndSet(expect, expect + 1)
+  private def compareAndIncrementWorkerCount(expect: Int): Boolean = ctl.compareAndSet(expect, expect + 1)
 
-  private def compareAndDecrementWorkerCount(expect: Int) = ctl.compareAndSet(expect, expect - 1)
+  private def compareAndDecrementWorkerCount(expect: Int): Boolean = ctl.compareAndSet(expect, expect - 1)
 
   private def decrementWorkerCount(): Unit = {
     do {
@@ -511,7 +512,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
       if (rs >= ThreadPoolExecutor.SHUTDOWN &&
         !(rs == ThreadPoolExecutor.SHUTDOWN &&
           firstTask == null &&
-          !workQueue.isEmpty)) {
+          !workQueue.isEmpty())) {
         return false
       }
 
@@ -526,12 +527,12 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
         if (compareAndIncrementWorkerCount(c)) {
           innerFlag = false
           flag = false
-        }
+        } else {
+          c = ctl.get()
 
-        c = ctl.get()
-
-        if (!innerFlag && ThreadPoolExecutor.runStateOf(c) != rs) {
-          innerFlag = false
+          if (!innerFlag && ThreadPoolExecutor.runStateOf(c) != rs) {
+            innerFlag = false
+          }
         }
       }
     }
@@ -539,7 +540,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
     val worker: Worker = new Worker(firstTask)
     val t = worker.thread
 
-    val mainLock = this.mainLock
+    val mainLock: ReentrantLock = this.mainLock
 
     mainLock.lock()
 
@@ -574,25 +575,26 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
   private def processWorkerExit(worker: Worker, completedAbruptly: Boolean): Unit = {
     if (completedAbruptly)
       decrementWorkerCount()
-
     val mainLock = this.mainLock
 
     mainLock.lock()
 
     try {
-      completedTaskCount += 1
+      completedTaskCount += worker.completedTasks
       workers.remove(worker)
     } finally {
       mainLock.unlock()
     }
 
+
     tryTerminate()
+
 
     val c = ctl.get()
     if (ThreadPoolExecutor.runStateLessThan(c, ThreadPoolExecutor.STOP)) {
       if (!completedAbruptly) {
         var min = if (allowCoreThreadTimeOut) 0 else corePoolSize
-        if (min == 0 && !workQueue.isEmpty)
+        if (min == 0 && !workQueue.isEmpty())
           min = 1
         if (ThreadPoolExecutor.workerCountOf(c) >= min) {
           return
@@ -610,8 +612,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
       var c = ctl.get()
       var rs = ThreadPoolExecutor.runStateOf(c)
 
-
-      if (rs >= ThreadPoolExecutor.SHUTDOWN && (rs >= ThreadPoolExecutor.STOP || workQueue.isEmpty)) {
+      if (rs >= ThreadPoolExecutor.SHUTDOWN && (rs >= ThreadPoolExecutor.STOP || workQueue.isEmpty())) {
         decrementWorkerCount()
         return null
       }
@@ -637,7 +638,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
 
       if (!retry) {
         try {
-          val runnable = if (timed)
+          val runnable: Runnable = if (timed)
             workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS)
           else
             workQueue.take()
@@ -662,6 +663,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
     try {
       if (task == null)
         task = getTask()
+
       while (task != null) {
         worker.lock()
         clearInterruptsForTaskRun()
@@ -688,6 +690,7 @@ class ThreadPoolExecutor(@volatile private var corePoolSize: Int, @volatile priv
     } finally {
       processWorkerExit(worker, completedAbruptly)
     }
+
   }
 }
 

@@ -8,6 +8,8 @@ import java.util.concurrent.locks.ReentrantLock
 import java.util
 import java.util.{NoSuchElementException, concurrent}
 
+import scala.scalanative.runtime.CAtomicInt
+
 
 class LinkedBlockingQueue[E](
     private final val capacity: Int = Integer.MAX_VALUE)
@@ -22,7 +24,7 @@ class LinkedBlockingQueue[E](
   if (capacity <= 0) throw new IllegalArgumentException()
 
   /** Current number of elements */
-  private final val count: AtomicInteger = new AtomicInteger(0)
+  private final val count: CAtomicInt = new CAtomicInt(0)
 
   /**
    * Head of linked list.
@@ -66,7 +68,7 @@ class LinkedBlockingQueue[E](
         enqueue(e)
         n += 1
       }
-      count.set(n)
+      count.store(n)
     } finally {
       putLock.unlock()
     }
@@ -117,9 +119,9 @@ class LinkedBlockingQueue[E](
     putLock.unlock()
   }
 
-  override def size(): Int = count.get()
+  override def size(): Int = count.load()
 
-  override def remainingCapacity(): Int = capacity - count.get()
+  override def remainingCapacity(): Int = capacity - count.load()
 
   override def put(e: E): Unit = {
     if (e == null) throw new NullPointerException()
@@ -127,7 +129,6 @@ class LinkedBlockingQueue[E](
     // holding count negative to indicate failure unless set.
     var c: Int                 = -1
     val putLock: ReentrantLock = this.putLock
-    val count: AtomicInteger   = this.count
     putLock.lockInterruptibly()
     try {
       /*
@@ -138,9 +139,9 @@ class LinkedBlockingQueue[E](
        * signalled if it ever changes from capacity. Similarly
        * for all other uses of count in other wait guards.
        */
-      while (count.get() == capacity) notFull.await()
+      while (count.load() == capacity) notFull.await()
       enqueue(e)
-      c = count.getAndIncrement()
+      c = count.fetchAdd(1)
       if (c + 1 < capacity)
         notFull.signal()
     } finally {
@@ -155,16 +156,15 @@ class LinkedBlockingQueue[E](
     var nanos: Long            = unit.toNanos(timeout)
     var c: Int                 = -1
     val putLock: ReentrantLock = this.putLock
-    val count: AtomicInteger   = this.count
     putLock.lockInterruptibly()
     try {
-      while (count.get() == capacity) {
+      while (count.load() == capacity) {
         if (nanos <= 0)
           return false
         nanos = notFull.awaitNanos(nanos)
       }
       enqueue(e)
-      c = count.getAndIncrement()
+      c = count.fetchAdd(1)
       if (c + 1 < capacity)
         notFull.signal()
     } finally {
@@ -177,16 +177,15 @@ class LinkedBlockingQueue[E](
 
   override def offer(e: E): Boolean = {
     if (e == null) throw new NullPointerException()
-    val count: AtomicInteger = this.count
-    if (count.get() == capacity)
+    if (count.load() == capacity)
       return false
     var c: Int                 = -1
     val putLock: ReentrantLock = this.putLock
     putLock.lock()
     try {
-      if (count.get() < capacity) {
+      if (count.load() < capacity) {
         enqueue(e)
-        c = count.getAndIncrement()
+        c = count.fetchAdd(1)
         if (c + 1 < capacity)
           notFull.signal()
       }
@@ -199,15 +198,17 @@ class LinkedBlockingQueue[E](
   }
 
   override def take(): E = {
-    var x: E                    = null.asInstanceOf[E]
-    var c: Int                  = -1
-    val count: AtomicInteger    = this.count
-    val takeLock: ReentrantLock = this.takeLock
+    var x: E = null.asInstanceOf[E]
+    var c: Int = -1
+
     takeLock.lockInterruptibly()
     try {
-      while (count.get() == 0) notEmpty.await()
+      count.load()
+      while (count.load() == 0)
+        notEmpty.await()
       x = dequeue
-      c = count.getAndDecrement()
+
+      c = count.fetchSub(1)
       if (c > 1)
         notEmpty.signal()
     } finally {
@@ -222,17 +223,16 @@ class LinkedBlockingQueue[E](
     var x: E                    = null.asInstanceOf[E]
     var c: Int                  = -1
     var nanos: Long             = unit.toNanos(timeout)
-    val count: AtomicInteger    = this.count
     val takeLock: ReentrantLock = this.takeLock
     takeLock.lockInterruptibly()
     try {
-      while (count.get() == 0) {
+      while (count.load() == 0) {
         if (nanos <= 0)
           return null.asInstanceOf[E]
         nanos = notEmpty.awaitNanos(nanos)
       }
       x = dequeue
-      c = count.getAndDecrement()
+      c = count.fetchSub(1)
       if (c > 1)
         notEmpty.signal()
     } finally {
@@ -244,17 +244,16 @@ class LinkedBlockingQueue[E](
   }
 
   override def poll(): E = {
-    val count: AtomicInteger = this.count
-    if (count.get() == 0)
+    if (count.load() == 0)
       return null.asInstanceOf[E]
     var x: E                    = null.asInstanceOf[E]
     var c: Int                  = -1
     val takeLock: ReentrantLock = this.takeLock
     takeLock.lock()
     try {
-      if (count.get() > 0) {
+      if (count.load() > 0) {
         x = dequeue
-        c = count.getAndDecrement()
+        c = count.fetchSub(1)
         if (c > 1)
           notEmpty.signal()
       }
@@ -267,7 +266,7 @@ class LinkedBlockingQueue[E](
   }
 
   override def peek(): E = {
-    if (count.get() == 0)
+    if (count.load() == 0)
       return null.asInstanceOf[E]
     val takeLock: ReentrantLock = this.takeLock
     takeLock.lock()
@@ -289,7 +288,7 @@ class LinkedBlockingQueue[E](
     trail.next = p.next
     if (last == p)
       last = trail
-    if (count.getAndDecrement() == capacity)
+    if (count.fetchSub(1) == capacity)
       notFull.signal()
   }
 
@@ -319,7 +318,7 @@ class LinkedBlockingQueue[E](
   override def toArray: Array[Object] = {
     fullyLock()
     try {
-      val size: Int        = count.get()
+      val size: Int        = count.load()
       val a: Array[Object] = new Array[Object](size)
       var k: Int           = 0
       var p: Node[E]       = head.next
@@ -338,7 +337,7 @@ class LinkedBlockingQueue[E](
   override def toArray[T](a: Array[T]): Array[T] = {
     fullyLock()
     try {
-      val size: Int = count.get()
+      val size: Int = count.load()
       if (a.length < size) {}
       //TODO grow input array
 
@@ -380,7 +379,7 @@ class LinkedBlockingQueue[E](
         p = h.next
       }
       head = last
-      if (count.getAndSet(0) == capacity)
+      if (count.fetchAdd(0) == capacity)
         notFull.signal()
     } finally {
       fullyUnlock()
@@ -399,7 +398,7 @@ class LinkedBlockingQueue[E](
     val takeLock: ReentrantLock = this.takeLock
     takeLock.lock()
     try {
-      val n: Int = Math.min(maxElements, count.get())
+      val n: Int = Math.min(maxElements, count.load())
       // count.get provides visibility to first n Nodes
       var h: Node[E] = head
       var i: Int     = 0
@@ -417,7 +416,7 @@ class LinkedBlockingQueue[E](
         // Restore invariants even if c.add() threw
         if (i > 0) {
           head = h
-          signalNotFull = count.getAndAdd(-i) == capacity
+          signalNotFull = count.fetchSub(i) == capacity
         }
       }
     } finally {
@@ -524,7 +523,7 @@ class LinkedBlockingQueue[E](
       // Read in capacity, and any hidden stuff
       s.defaultReadObject()
 
-      count.set(0)
+      count.store(0)
       head = new Node[E](null.asInstanceOf[E])
       last = head
 

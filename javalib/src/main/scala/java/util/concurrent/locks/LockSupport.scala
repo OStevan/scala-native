@@ -11,12 +11,12 @@ object LockSupport {
 
   def unpark(thread: Thread): Unit = {
     if (thread != null)
-      thread.threadPark()
+      thread.threadUnpark()
   }
 
   def park(): Unit = {
     val thread = Thread.currentThread()
-    thread.threadUnpark()
+    thread.threadPark()
   }
 
   def parkNanos(nanos: Long): Unit = {}

@@ -30,8 +30,9 @@ abstract class AbstractQueuedSynchronizer
 
   protected final def setState(newState: CInt): Unit = state.store(newState)
 
-  protected final def compareAndSetState(expect: Int, update: Int): Boolean =
+  protected final def compareAndSetState(expect: CInt, update: CInt): Boolean = {
     state.compareAndSwapStrong(expect, update)._1
+  }
 
   private def enq(node: Node): Node = {
     while (true) {
@@ -350,8 +351,9 @@ abstract class AbstractQueuedSynchronizer
   final def acquireInterruptibly(arg: Int): Unit = {
     if (Thread.interrupted())
       throw new InterruptedException()
-    if (!tryAcquire(arg))
+    if (!tryAcquire(arg)) {
       doAcquireInterruptibly(arg)
+    }
   }
 
   final def tryAcquireNanos(arg: Int, nanosTimeout: Long): Boolean = {
