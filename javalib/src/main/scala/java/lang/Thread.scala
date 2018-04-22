@@ -61,22 +61,20 @@ class Thread private (
   private val sleepMutex   = new Object
   private val joinMutex    = new Object
   private val suspendMutex = new Object
-  private val parkItself   = new Object
   private var suspendState = internalNotSuspended
-  private var parked: Object = _
+  private val parked       = new Object
 
   // possible solution to park
   def threadPark() = {
-    parkItself.synchronized {
-      parked = parkItself
-      parked.wait()
+    parked.synchronized {
+      if (livenessState.load() != internalInterrupted)
+        parked.wait()
     }
   }
 
   def threadUnpark() = {
     val parked = this.parked
     parked.synchronized {
-      this.parked = null
       parked.notify()
     }
   }
@@ -141,15 +139,14 @@ class Thread private (
 
   def interrupt(): Unit = {
     checkAccess()
-    livenessState.compareAndSwapStrong(internalStarting, internalInterrupted)
-    livenessState.compareAndSwapStrong(internalStarted, internalInterrupted)
     sleepMutex.synchronized {
-      sleepMutex.notify()
-    }
-    if (parked != null)
       parked.synchronized {
+        livenessState.compareAndSwapStrong(internalStarting, internalInterrupted)
+        livenessState.compareAndSwapStrong(internalStarted, internalInterrupted)
         parked.notify()
       }
+      sleepMutex.notify()
+    }
   }
 
   final def isAlive: scala.Boolean = {

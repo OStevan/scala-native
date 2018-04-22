@@ -515,7 +515,6 @@ abstract class AbstractQueuedSynchronizer
       return false
     if (node.next.get() != null)
       return true
-
     findNodeFromTail(node)
   }
 
@@ -549,7 +548,9 @@ abstract class AbstractQueuedSynchronizer
       return true
     }
 
-    while (!isOnSyncQueue(node)) Thread.`yield`()
+    while (!isOnSyncQueue(node)) {
+      Thread.`yield`()
+    }
     false
   }
 
