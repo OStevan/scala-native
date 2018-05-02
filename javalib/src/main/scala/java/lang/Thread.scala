@@ -72,6 +72,13 @@ class Thread private (
     }
   }
 
+  def threadPark(nano: scala.Long) = {
+    parked.synchronized {
+      if (livenessState.load() != internalInterrupted && nano > 0)
+        parked.wait(nano / 1000000, (nano % 1000000).toInt)
+    }
+  }
+
   def threadUnpark() = {
     val parked = this.parked
     parked.synchronized {
