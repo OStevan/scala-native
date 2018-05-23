@@ -225,7 +225,7 @@ abstract class ForkJoinTask[V] extends Future[V] with Serializable {
       try {
         val noArgCtor: Constructor[_] = null
         val cs
-          : Array[Constructor[_]] = ec.getConstructors() // public ctors only
+        : Array[Constructor[_]] = ec.getConstructors() // public ctors only
         var i: Int                = 0
         while (i < cs.length) {
           val c: Constructor[_]   = cs(i)
@@ -487,27 +487,27 @@ object ForkJoinTask {
   final val SMASK: Int       = 0x0000ffff; // short bits for tags
 
   /**
-   * Table of exceptions thrown by tasks, to enable reporting by
-   * callers. Because exceptions are rare, we don't directly keep
-   * them with task objects, but instead use a weak ref table.  Note
-   * that cancellation exceptions don't appear in the table, but are
-   * instead recorded as status values.
-   *
-   * Note: These statics are initialized below in static block.
-   */
+    * Table of exceptions thrown by tasks, to enable reporting by
+    * callers. Because exceptions are rare, we don't directly keep
+    * them with task objects, but instead use a weak ref table.  Note
+    * that cancellation exceptions don't appear in the table, but are
+    * instead recorded as status values.
+    *
+    * Note: These statics are initialized below in static block.
+    */
   private final val exceptionTable: Array[ExceptionNode]           = null
   private final val exceptionTableLock: ReentrantLock              = null
   private final val exceptionTableRefQueue: ReferenceQueue[Object] = null
 
   /**
-   * Fixed capacity for exceptionTable.
-   */
+    * Fixed capacity for exceptionTable.
+    */
   private final val EXCEPTION_MAP_CAPACITY: Int = 32
 
   final class ExceptionNode(var task: ForkJoinTask[_],
                             var ex: Throwable,
                             var nextNode: ExceptionNode)
-      extends WeakReference[ForkJoinTask[_]](task) {
+    extends WeakReference[ForkJoinTask[_]](task) {
 
     var thrower: Long = Thread.currentThread().getId
 
@@ -524,7 +524,7 @@ object ForkJoinTask {
   }
 
   private def expungeStaleExceptions(): Unit = {
-    var x: Object = exceptionTableRefQueue.poll()
+    var x: Object = exceptionTableRefQueue.poll
     while (x != null) {
       if (x.isInstanceOf[ExceptionNode]) {
         val key: ForkJoinTask[_]    = x.asInstanceOf[ExceptionNode].get()
@@ -548,7 +548,7 @@ object ForkJoinTask {
           }
         }
       }
-      x = exceptionTableRefQueue.poll()
+      x = exceptionTableRefQueue.poll
     }
   }
 
@@ -671,7 +671,7 @@ object ForkJoinTask {
   }
 
   final class AdaptedRunnable[T](val runnable: Runnable, var result: T)
-      extends ForkJoinTask[T]
+    extends ForkJoinTask[T]
       with RunnableFuture[T] {
 
     if (runnable == null)
@@ -697,7 +697,7 @@ object ForkJoinTask {
   }
 
   final class AdaptedRunnableAction(val runnable: Runnable)
-      extends ForkJoinTask[Void]
+    extends ForkJoinTask[Void]
       with RunnableFuture[Void] {
 
     if (runnable == null)
@@ -723,7 +723,7 @@ object ForkJoinTask {
   }
 
   final class AdaptedCallable[T](val callable: Callable[_ <: T])
-      extends ForkJoinTask[T]
+    extends ForkJoinTask[T]
       with RunnableFuture[T] {
 
     var result: T = null.asInstanceOf[T]

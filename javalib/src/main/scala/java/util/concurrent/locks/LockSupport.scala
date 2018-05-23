@@ -19,8 +19,14 @@ object LockSupport {
     thread.threadPark()
   }
 
-  def parkNanos(nanos: Long): Unit = {}
+  def parkNanos(nanos: Long): Unit = ???
 
-  def parkUntil(deadline: Long): Unit = {}
+  def parkUntil(deadline: Long): Unit = ???
+
+  def park(obj: Object): Unit = ???
+
+  def parkNanos(obj: Object, nanos: Long): Unit = ???
+
+  def parkUntil(obj: Object, nanos: Long): Unit = ???
 
 }

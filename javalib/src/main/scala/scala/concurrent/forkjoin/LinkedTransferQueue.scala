@@ -238,8 +238,8 @@ class LinkedTransferQueue[E <: AnyRef] extends util.AbstractQueue[E] with Transf
         var s: Node = null
         var n: Node = null
         while ({s = b.next.get(); s} != null &&
-              s != b && s.isMatched &&
-              {n = s.next.get(); s} != null && n != s)
+          s != b && s.isMatched &&
+          {n = s.next.get(); s} != null && n != s)
           b.casNext(s, n)
       }
 
@@ -369,7 +369,7 @@ class LinkedTransferQueue[E <: AnyRef] extends util.AbstractQueue[E] with Transf
         val item: AnyRef = p.item.get()
         if (p.isData) {
           if (item != null && item != p && obj.equals(item) &&
-          p.tryMatchData()) {
+            p.tryMatchData()) {
             unsplice(pred, p)
             return true
           }

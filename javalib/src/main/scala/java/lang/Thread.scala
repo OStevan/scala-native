@@ -702,3 +702,11 @@ object Thread extends scala.scalanative.runtime.ThreadModuleBase {
 
   def initMainThread(): Unit = mainThread.initMainThread()
 }
+
+
+// thread unsafe mechanics
+
+object ThreadBaseUnsafe {
+  def park(isAbsolute: scala.Boolean, time: scala.Long): Unit = ???
+  def unpark(thread: Thread): Unit = ???
+}

@@ -1,10 +1,10 @@
 package scala.concurrent.forkjoin
 
 class ForkJoinWorkerThread(final var pool: ForkJoinPool)
-    extends Thread("aForkJoinWorkerThread") {
+  extends Thread("aForkJoinWorkerThread") {
 
   final var workQueue
-    : ForkJoinPool.WorkQueue = pool.registerWorker(this) // work-stealing mechanics
+  : ForkJoinPool.WorkQueue = pool.registerWorker(this) // work-stealing mechanics
 
   def getPool: ForkJoinPool = pool
 

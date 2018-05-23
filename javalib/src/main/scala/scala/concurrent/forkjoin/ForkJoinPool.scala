@@ -828,7 +828,7 @@ class ForkJoinPool(parallelism: Int, val factory: ForkJoinPool.ForkJoinWorkerThr
           }
           if(ws == null || m <= 0 && !breakRestart)
             breakRestart = true // shutting down
-              h = (j.hint | 1) & m
+          h = (j.hint | 1) & m
           v = ws(h)
           if(v == null || v.currentSteal != subtask && !breakRestart) {
             var origin: Int = h
@@ -836,7 +836,7 @@ class ForkJoinPool(parallelism: Int, val factory: ForkJoinPool.ForkJoinWorkerThr
               h = ((h + 2) & m) & 15
               if(h == 1 && subtask.status.load() < 0 || j.currentJoin.get() != subtask)
                 continueRestart = false // occasional staleness check
-                  v = ws(h)
+              v = ws(h)
               if(v != null && v.currentSteal == subtask && !breakRestart && !break && continueRestart) {
                 j.hint = h // save hint
                 break = true
@@ -851,14 +851,14 @@ class ForkJoinPool(parallelism: Int, val factory: ForkJoinPool.ForkJoinWorkerThr
             var b: Int = 0
             if(subtask.status.load() < 0) // consistency checks
               continueRestart = true
-                b = v.base.load() - v.top
+            b = v.base.load() - v.top
             a = v.array
             if(b < 0 && a != null && continueRestart) {
               val i: Int = (a.length - 1) & b
               val t: ForkJoinTask[_] = a(i).cast[ForkJoinTask[_]]
               if(subtask.status.load() < 0 || j.currentJoin.get() != subtask || v.currentSteal != subtask)
                 continueRestart = true // stale
-                  stat = 1 // apparent progress
+              stat = 1 // apparent progress
               if(continueRestart && t != null && v.base.load() == b &&
                 Atomic.compare_and_swap_strong_long(a.at(i).cast[Atomic.CAtomicLong], t.cast[Atomic.CAtomicLong], 0L)) {
                 v.base.store(b + 1) // help stealer
@@ -1245,7 +1245,7 @@ class ForkJoinPool(parallelism: Int, val factory: ForkJoinPool.ForkJoinWorkerThr
     var a: Array[Object] = null
     var m: Int = 0
     if(q != null && {a = q.array; a} != null && {m = a.length - 1; m} >= 0 &&
-        root != null && root.status.load() >= 0) {
+      root != null && root.status.load() >= 0) {
       var breakWhile: Boolean = false
       while(!breakWhile) {
         var s: Int = 0
@@ -2245,13 +2245,13 @@ object ForkJoinPool {
     var s: Int = 0
 
     if(t != null &&
-        {z = submitters.get(); z} != null &&
-        {p = common; p} != null &&
-        {ws = p.workQueues; ws} != null &&
-        {m = ws.length - 1; m} >= 0 &&
-        {q = ws(m & z.seed & SQMASK); q} != null &&
-        {s = q.top; s} != q.base.load() &&
-        {a = q.array; a} != null) {
+      {z = submitters.get(); z} != null &&
+      {p = common; p} != null &&
+      {ws = p.workQueues; ws} != null &&
+      {m = ws.length - 1; m} >= 0 &&
+      {q = ws(m & z.seed & SQMASK); q} != null &&
+      {s = q.top; s} != q.base.load() &&
+      {a = q.array; a} != null) {
       val j = (a.length - 1) & (s - 1)
       if(a.at(j).cast[ForkJoinTask[_]] == t && q.qlock.compareAndSwapStrong(0, 1)._1) {
         if(q.array == a && q.top == s && // recheck
